@@ -22,7 +22,6 @@ func run(ctx context.Context, responsesCh chan int) {
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("stopped sending requests")
 			return
 		default:
 			resp, err := http.Get(URL)
