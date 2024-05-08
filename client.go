@@ -19,7 +19,7 @@ var startTime time.Time
 
 var requestInterval = 500 * time.Millisecond
 
-func run(ctx context.Context, method string, responsesCh chan int) {
+func run(ctx context.Context, method string, responsesCh chan Response) {
 	startTime = time.Now()
 
 	for {
@@ -53,12 +53,14 @@ func run(ctx context.Context, method string, responsesCh chan int) {
 			}
 			code := resp.StatusCode
 			serverProcessingTime := endT.Sub(startT)
-			_ = serverProcessingTime
 
 			io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
 
-			responsesCh <- code
+			responsesCh <- Response{
+				StatusCode:   code,
+				ResponseTime: serverProcessingTime,
+			}
 			time.Sleep(requestInterval)
 		}
 	}

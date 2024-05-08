@@ -41,19 +41,68 @@ const URL = "http://localhost:3000"
 
 var stop = make(chan os.Signal, 1)
 
-type responseMsg int
+type responseMsg Response
 
-var mapMutex sync.RWMutex
-var responseMap map[int]int = map[int]int{
-	1: 0, // each index represents 1XX status
-	2: 0,
-	3: 0,
-	4: 0,
-	5: 0,
+type ResponseStats struct {
+	Requests        int64
+	ResponseTimes   time.Duration
+	AvgResponseTime time.Duration
+}
+
+type Response struct {
+	StatusCode   int
+	ResponseTime time.Duration
+}
+
+type ResponseStatsMap struct {
+	Mutex sync.RWMutex
+	Stats map[int]*ResponseStats
+}
+
+var responseMap *ResponseStatsMap = NewResponseStatsMap()
+
+func NewResponseStatsMap() *ResponseStatsMap {
+	return &ResponseStatsMap{
+		Stats: map[int]*ResponseStats{
+			1: {0, time.Duration(0), time.Duration(0)}, // each index represents 1XX status
+			2: {0, time.Duration(0), time.Duration(0)},
+			3: {0, time.Duration(0), time.Duration(0)},
+			4: {0, time.Duration(0), time.Duration(0)},
+			5: {0, time.Duration(0), time.Duration(0)},
+		},
+	}
+}
+
+func (rsm *ResponseStatsMap) AddResponse(response Response) {
+	responseMap.Mutex.Lock()
+	defer responseMap.Mutex.Unlock()
+
+	statusXX := response.StatusCode / 100
+
+	entry := responseMap.Stats[statusXX]
+
+	entry.Requests++
+	entry.ResponseTimes += response.ResponseTime
+
+	avg := entry.ResponseTimes.Nanoseconds() / entry.Requests
+	entry.AvgResponseTime = time.Duration(avg)
+}
+
+func (rsm *ResponseStatsMap) MapToRows() []table.Row {
+	responseMap.Mutex.RLock()
+	defer responseMap.Mutex.RUnlock()
+
+	return []table.Row{
+		{"1xx", fmt.Sprint(responseMap.Stats[1].Requests), fmt.Sprintf("%s", responseMap.Stats[1].AvgResponseTime)},
+		{"2xx", fmt.Sprint(responseMap.Stats[2].Requests), fmt.Sprintf("%s", responseMap.Stats[2].AvgResponseTime)},
+		{"3xx", fmt.Sprint(responseMap.Stats[3].Requests), fmt.Sprintf("%s", responseMap.Stats[3].AvgResponseTime)},
+		{"4xx", fmt.Sprint(responseMap.Stats[4].Requests), fmt.Sprintf("%s", responseMap.Stats[4].AvgResponseTime)},
+		{"5xx", fmt.Sprint(responseMap.Stats[5].Requests), fmt.Sprintf("%s", responseMap.Stats[5].AvgResponseTime)},
+	}
 }
 
 type model struct {
-	sub       chan int
+	sub       chan Response
 	responses int
 	spinner   spinner.Model
 	table     table.Model
@@ -63,16 +112,11 @@ type model struct {
 var totalRequests = atomic.Int64{}
 
 // A command that waits for responses from the client
-func waitForResponses(sub chan int) tea.Cmd {
+func waitForResponses(sub chan Response) tea.Cmd {
 	return func() tea.Msg {
 		resp := <-sub
 
-		statusXX := resp / 100
-
-		mapMutex.Lock()
-		responseMap[statusXX]++
-		mapMutex.Unlock()
-
+		responseMap.AddResponse(resp)
 		totalRequests.Add(1)
 
 		return responseMsg(resp)
@@ -87,7 +131,7 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	m.table.SetRows(mapToRows())
+	m.table.SetRows(responseMap.MapToRows())
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -104,7 +148,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "r" {
 			startTime = time.Now()
 			totalRequests.Store(0)
-			responseMap = map[int]int{1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+			responseMap = NewResponseStatsMap()
 			return m, nil
 		}
 
@@ -125,13 +169,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	s := fmt.Sprintf(
-		"\n %s Time Elapsed: %s\n",
+		"%s Time Elapsed: %s\n",
 		m.spinner.View(),
 		time.Since(startTime).Round(time.Second).String(),
 	)
-	s += fmt.Sprintf(" %s Requests Sent: %d\n", m.spinner.View(), totalRequests.Load())
-	s += fmt.Sprintf(" %s Req/Second: %d\n", m.spinner.View(), reqPerSecond.Load())
-	s += fmt.Sprintf(" %s Requests Interval: %s\n", m.spinner.View(), requestInterval)
+	s += fmt.Sprintf("%s Requests Sent: %d\n", m.spinner.View(), totalRequests.Load())
+	s += fmt.Sprintf("%s Req/Second: %d\n", m.spinner.View(), reqPerSecond.Load())
+	s += fmt.Sprintf("%s Requests Interval: %s\n", m.spinner.View(), requestInterval)
 
 	s += fmt.Sprintf("\n\n%s", m.table.View())
 
@@ -146,19 +190,6 @@ func (m model) View() string {
 	}
 
 	return appStyle.Render(s)
-}
-
-func mapToRows() []table.Row {
-	mapMutex.RLock()
-	defer mapMutex.RUnlock()
-
-	return []table.Row{
-		{"1xx", fmt.Sprint(responseMap[1]), "0ms"},
-		{"2xx", fmt.Sprint(responseMap[2]), "37ms"},
-		{"3xx", fmt.Sprint(responseMap[3]), "10ms"},
-		{"4xx", fmt.Sprint(responseMap[4]), "212ms"},
-		{"5xx", fmt.Sprint(responseMap[5]), "303ms"},
-	}
 }
 
 var reqPerSecond = atomic.Int64{}
@@ -182,7 +213,7 @@ func calc(ctx context.Context) {
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	respCh := make(chan int)
+	respCh := make(chan Response)
 
 	go run(ctx, "GET", respCh)
 	go calc(ctx)
@@ -194,16 +225,10 @@ func main() {
 	columns := []table.Column{
 		{Title: "Status", Width: 6},
 		{Title: "Requests", Width: 8},
-		{Title: "Avg.Resp", Width: 9},
+		{Title: "Avg. Resp Time", Width: 14},
 	}
 
-	rows := []table.Row{
-		{"1xx", "0", "0ms"},
-		{"2xx", "0", "37ms"},
-		{"3xx", "0", "10ms"},
-		{"4xx", "0", "212ms"},
-		{"5xx", "0", "303ms"},
-	}
+	rows := []table.Row{}
 
 	t := table.New(
 		table.WithColumns(columns),
