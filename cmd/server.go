@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"net/http"
 	"sync/atomic"
+	"time"
 )
 
 var requests = atomic.Int64{}
@@ -13,6 +14,7 @@ func main() {
 	http.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
 		slog.Info("got request")
+		time.Sleep(55 * time.Millisecond)
 
 		randomResp := rand.Intn(10) + 1
 

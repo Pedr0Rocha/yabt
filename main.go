@@ -20,6 +20,7 @@ var (
 	appStyle     = lipgloss.NewStyle().Margin(1, 2, 0, 2)
 	spinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("57"))
 	helpStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Margin(1, 0)
+	descStyle    = helpStyle.Copy().UnsetMargins()
 	infoStyle    = helpStyle.Copy()
 	spinners     = []spinner.Spinner{
 		spinner.Line,
@@ -129,8 +130,8 @@ func (m model) View() string {
 		time.Since(startTime).Round(time.Second).String(),
 	)
 	s += fmt.Sprintf(" %s Requests Sent: %d\n", m.spinner.View(), totalRequests.Load())
-	s += fmt.Sprintf(" %s Requests Interval: %s\n", m.spinner.View(), requestInterval)
 	s += fmt.Sprintf(" %s Req/Second: %d\n", m.spinner.View(), reqPerSecond.Load())
+	s += fmt.Sprintf(" %s Requests Interval: %s\n", m.spinner.View(), requestInterval)
 
 	s += fmt.Sprintf("\n\n%s", m.table.View())
 
@@ -183,7 +184,7 @@ func main() {
 
 	respCh := make(chan int)
 
-	go run(ctx, respCh)
+	go run(ctx, "GET", respCh)
 	go calc(ctx)
 
 	spin := spinner.New()
