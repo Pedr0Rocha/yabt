@@ -13,22 +13,26 @@ var requests = atomic.Int64{}
 func main() {
 	http.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
-		slog.Info("got request")
-		time.Sleep(55 * time.Millisecond)
+		time.Sleep(time.Duration(rand.Intn(50)) * time.Millisecond)
 
-		randomResp := rand.Intn(10) + 1
+		randomResp := rand.Intn(100) + 1
 
-		if randomResp <= 2 {
+		if randomResp <= 10 {
 			w.WriteHeader(http.StatusNotFound)
 			return
-		}
-
-		if randomResp == 3 {
+		} else if randomResp >= 11 && randomResp <= 15 {
+			w.WriteHeader(http.StatusPermanentRedirect)
+			return
+		} else if randomResp >= 16 && randomResp <= 20 {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
+		} else if randomResp == 21 {
+			w.WriteHeader(http.StatusSwitchingProtocols)
+			return
+		} else {
+			w.WriteHeader(http.StatusOK)
 		}
 
-		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("hello"))
 	})
 

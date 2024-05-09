@@ -39,6 +39,8 @@ var (
 
 const URL = "http://localhost:3000"
 
+var METHOD = "GET"
+
 var stop = make(chan os.Signal, 1)
 
 type responseMsg Response
@@ -47,6 +49,8 @@ type ResponseStats struct {
 	Requests        int64
 	ResponseTimes   time.Duration
 	AvgResponseTime time.Duration
+	MinResponseTime time.Duration
+	MaxResponseTime time.Duration
 }
 
 type Response struct {
@@ -64,11 +68,11 @@ var responseMap *ResponseStatsMap = NewResponseStatsMap()
 func NewResponseStatsMap() *ResponseStatsMap {
 	return &ResponseStatsMap{
 		Stats: map[int]*ResponseStats{
-			1: {0, time.Duration(0), time.Duration(0)}, // each index represents 1XX status
-			2: {0, time.Duration(0), time.Duration(0)},
-			3: {0, time.Duration(0), time.Duration(0)},
-			4: {0, time.Duration(0), time.Duration(0)},
-			5: {0, time.Duration(0), time.Duration(0)},
+			1: {0, 0, 0, 0, 0},
+			2: {0, 0, 0, 0, 0},
+			3: {0, 0, 0, 0, 0},
+			4: {0, 0, 0, 0, 0},
+			5: {0, 0, 0, 0, 0},
 		},
 	}
 }
@@ -84,6 +88,13 @@ func (rsm *ResponseStatsMap) AddResponse(response Response) {
 	entry.Requests++
 	entry.ResponseTimes += response.ResponseTime
 
+	if entry.MinResponseTime == 0 {
+		entry.MinResponseTime = response.ResponseTime
+	} else {
+		entry.MinResponseTime = min(entry.MinResponseTime, response.ResponseTime)
+	}
+	entry.MaxResponseTime = max(entry.MaxResponseTime, response.ResponseTime)
+
 	avg := entry.ResponseTimes.Nanoseconds() / entry.Requests
 	entry.AvgResponseTime = time.Duration(avg)
 }
@@ -92,13 +103,19 @@ func (rsm *ResponseStatsMap) MapToRows() []table.Row {
 	responseMap.Mutex.RLock()
 	defer responseMap.Mutex.RUnlock()
 
-	return []table.Row{
-		{"1xx", fmt.Sprint(responseMap.Stats[1].Requests), fmt.Sprintf("%s", responseMap.Stats[1].AvgResponseTime)},
-		{"2xx", fmt.Sprint(responseMap.Stats[2].Requests), fmt.Sprintf("%s", responseMap.Stats[2].AvgResponseTime)},
-		{"3xx", fmt.Sprint(responseMap.Stats[3].Requests), fmt.Sprintf("%s", responseMap.Stats[3].AvgResponseTime)},
-		{"4xx", fmt.Sprint(responseMap.Stats[4].Requests), fmt.Sprintf("%s", responseMap.Stats[4].AvgResponseTime)},
-		{"5xx", fmt.Sprint(responseMap.Stats[5].Requests), fmt.Sprintf("%s", responseMap.Stats[5].AvgResponseTime)},
+	table := []table.Row{}
+
+	for i := 1; i < 6; i++ {
+		table = append(table, []string{
+			fmt.Sprintf("%dxx", i),
+			fmt.Sprint(responseMap.Stats[i].Requests),
+			fmt.Sprintf("%s", responseMap.Stats[i].AvgResponseTime),
+			fmt.Sprintf("%s", responseMap.Stats[i].MinResponseTime),
+			fmt.Sprintf("%s", responseMap.Stats[i].MaxResponseTime),
+		})
 	}
+
+	return table
 }
 
 type model struct {
@@ -148,6 +165,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "r" {
 			startTime = time.Now()
 			totalRequests.Store(0)
+			bestReqPerSecond.Store(0)
 			responseMap = NewResponseStatsMap()
 			return m, nil
 		}
@@ -174,12 +192,17 @@ func (m model) View() string {
 		time.Since(startTime).Round(time.Second).String(),
 	)
 	s += fmt.Sprintf("%s Requests Sent: %d\n", m.spinner.View(), totalRequests.Load())
-	s += fmt.Sprintf("%s Req/Second: %d\n", m.spinner.View(), reqPerSecond.Load())
-	s += fmt.Sprintf("%s Requests Interval: %s\n", m.spinner.View(), requestInterval)
+	s += fmt.Sprintf(
+		"%s Req/Second: %d %s\n",
+		m.spinner.View(),
+		reqPerSecond.Load(),
+		descStyle.Render(fmt.Sprintf("(%d best)", bestReqPerSecond.Load())),
+	)
+	s += fmt.Sprintf("\nRequests Interval: %s\n", requestInterval)
 
 	s += fmt.Sprintf("\n\n%s", m.table.View())
 
-	s += infoStyle.Render(fmt.Sprintf("\nURL: %s\n", URL))
+	s += infoStyle.Render(fmt.Sprintf("\n%s %s\n", METHOD, URL))
 
 	if !m.quitting {
 		s += helpStyle.Render(fmt.Sprintf("\n↑/↓: req/s • r: reset stats • q: exit\n"))
@@ -193,6 +216,7 @@ func (m model) View() string {
 }
 
 var reqPerSecond = atomic.Int64{}
+var bestReqPerSecond = atomic.Int64{}
 
 func calc(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Second)
@@ -206,6 +230,10 @@ func calc(ctx context.Context) {
 		case <-ticker.C:
 			reqPerSecond.Store(totalRequests.Load() - int64(lastTickReq))
 			lastTickReq = int(totalRequests.Load())
+
+			if reqPerSecond.Load() > bestReqPerSecond.Load() {
+				bestReqPerSecond.Store(reqPerSecond.Load())
+			}
 		}
 	}
 }
@@ -215,7 +243,7 @@ func main() {
 
 	respCh := make(chan Response)
 
-	go run(ctx, "GET", respCh)
+	go run(ctx, METHOD, respCh)
 	go calc(ctx)
 
 	spin := spinner.New()
@@ -225,7 +253,9 @@ func main() {
 	columns := []table.Column{
 		{Title: "Status", Width: 6},
 		{Title: "Requests", Width: 8},
-		{Title: "Avg. Resp Time", Width: 14},
+		{Title: "Resp. Time (avg)", Width: 16},
+		{Title: "Min.", Width: 14},
+		{Title: "Max.", Width: 14},
 	}
 
 	rows := []table.Row{}
