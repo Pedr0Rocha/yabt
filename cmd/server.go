@@ -13,7 +13,7 @@ var requests = atomic.Int64{}
 func main() {
 	http.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
-		time.Sleep(time.Duration(rand.Intn(50)) * time.Millisecond)
+		time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)
 
 		randomResp := rand.Intn(100) + 1
 
