@@ -1,6 +1,6 @@
-# Yet Another Benchmark Tool
+# Yet Another (http) Benchmark Tool
 
-However, this one is **interactive** (and beautiful, thanks to [bubbletea](https://github.com/charmbracelet/bubbletea)).
+However, this one is **interactive** (and it looks nice, thanks to [bubbletea](https://github.com/charmbracelet/bubbletea)).
 The use case is to tweak the req/sec on the fly by increasing or decreasing the interval between each request.
 Each time you press up, it will divide the request interval by 2. Same for arrow down, which will multiply it by 2.
 
@@ -9,6 +9,16 @@ response header is available. Meaning it should only measure the server processi
 
 It also features reset stats ("r"). This will reset all the stats and keep the req/s as is. So you can find the right req/s
 and start calculating stats from there.
+
+## Usage
+
+```
+-url string
+  URL to send requests to
+
+$ ./yabt -url=http://localhost:8080
+
+```
 
 ## Demo
 

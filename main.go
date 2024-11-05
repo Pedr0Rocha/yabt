@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"math/rand"
+	"net/url"
 	"os"
 	"os/signal"
 	"sync"
@@ -37,9 +39,10 @@ var (
 			BorderForeground(lipgloss.Color("240"))
 )
 
-const URL = "http://localhost:3000"
-
-var METHOD = "GET"
+var (
+	requestUrl = "http://localhost:8083"
+	method     = "GET"
+)
 
 var stop = make(chan os.Signal, 1)
 
@@ -128,7 +131,6 @@ type model struct {
 
 var totalRequests = atomic.Int64{}
 
-// A command that waits for responses from the client
 func waitForResponses(sub chan Response) tea.Cmd {
 	return func() tea.Msg {
 		resp := <-sub
@@ -143,7 +145,7 @@ func waitForResponses(sub chan Response) tea.Cmd {
 func (m model) Init() tea.Cmd {
 	return tea.Batch(
 		m.spinner.Tick,
-		waitForResponses(m.sub), // wait for responses
+		waitForResponses(m.sub),
 	)
 }
 
@@ -202,7 +204,7 @@ func (m model) View() string {
 
 	s += fmt.Sprintf("\n\n%s", m.table.View())
 
-	s += infoStyle.Render(fmt.Sprintf("\n%s %s\n", METHOD, URL))
+	s += infoStyle.Render(fmt.Sprintf("\n%s %s\n", method, requestUrl))
 
 	if !m.quitting {
 		s += helpStyle.Render(fmt.Sprintf("\n↑/↓: req/s • r: reset stats • q: exit\n"))
@@ -238,12 +240,28 @@ func calc(ctx context.Context) {
 	}
 }
 
+var urlFlag = flag.String("url", "", "URL to send requests to | e.g. https://google.com")
+
 func main() {
+	flag.Parse()
+
+	if urlFlag == nil || *urlFlag == "" {
+		fmt.Println("URL is required, please provite it with -url flag")
+		os.Exit(1)
+	}
+
+	reqUrl, err := url.Parse(*urlFlag)
+	if err != nil || reqUrl.Scheme == "" || reqUrl.Host == "" {
+		fmt.Println("could not parse url", reqUrl, err)
+		os.Exit(1)
+	}
+	requestUrl = reqUrl.String()
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	respCh := make(chan Response)
 
-	go run(ctx, METHOD, respCh)
+	go run(ctx, respCh)
 	go calc(ctx)
 
 	spin := spinner.New()

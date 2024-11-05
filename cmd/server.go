@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"math/rand"
 	"net/http"
@@ -34,6 +36,23 @@ func main() {
 		}
 
 		w.Write([]byte("hello"))
+	})
+
+	http.HandleFunc("POST /", func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		time.Sleep(time.Duration(rand.Intn(50)) * time.Millisecond)
+
+		body := struct{ Test string }{}
+		err := json.NewDecoder(r.Body).Decode(&body)
+		if err != nil {
+			fmt.Println("cant read the request body", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		fmt.Println(body)
+
+		w.WriteHeader(http.StatusCreated)
+		w.Write([]byte("posted"))
 	})
 
 	slog.Info("Server running at 3000")

@@ -19,7 +19,7 @@ var startTime time.Time
 
 var requestInterval = 500 * time.Millisecond
 
-func run(ctx context.Context, method string, responsesCh chan Response) {
+func run(ctx context.Context, responsesCh chan Response) {
 	startTime = time.Now()
 
 	for {
@@ -27,7 +27,7 @@ func run(ctx context.Context, method string, responsesCh chan Response) {
 		case <-ctx.Done():
 			return
 		default:
-			request, err := http.NewRequest(method, URL, strings.NewReader(""))
+			request, err := http.NewRequest(method, requestUrl, strings.NewReader(""))
 			if err != nil {
 				fmt.Println("could not create request", err)
 				return
