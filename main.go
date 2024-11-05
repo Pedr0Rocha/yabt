@@ -31,8 +31,7 @@ var (
 		spinner.Jump,
 		spinner.Pulse,
 		spinner.Points,
-		// spinner.Globe,
-		// spinner.Moon,
+		spinner.Meter,
 	}
 	baseTableStyle = lipgloss.NewStyle().
 			BorderStyle(lipgloss.NormalBorder()).
@@ -112,9 +111,9 @@ func (rsm *ResponseStatsMap) MapToRows() []table.Row {
 		table = append(table, []string{
 			fmt.Sprintf("%dxx", i),
 			fmt.Sprint(responseMap.Stats[i].Requests),
-			fmt.Sprintf("%s", responseMap.Stats[i].AvgResponseTime),
-			fmt.Sprintf("%s", responseMap.Stats[i].MinResponseTime),
-			fmt.Sprintf("%s", responseMap.Stats[i].MaxResponseTime),
+			fmt.Sprintf("%s", responseMap.Stats[i].AvgResponseTime.Round(time.Millisecond)),
+			fmt.Sprintf("%s", responseMap.Stats[i].MinResponseTime.Round(time.Millisecond)),
+			fmt.Sprintf("%s", responseMap.Stats[i].MaxResponseTime.Round(time.Millisecond)),
 		})
 	}
 
@@ -269,11 +268,11 @@ func main() {
 	spin.Style = spinnerStyle
 
 	columns := []table.Column{
-		{Title: "Status", Width: 6},
-		{Title: "Requests", Width: 8},
-		{Title: "Resp. Time (avg)", Width: 16},
-		{Title: "Min.", Width: 14},
-		{Title: "Max.", Width: 14},
+		{Title: "Status", Width: 8},
+		{Title: "Reqs", Width: 8},
+		{Title: "Avg", Width: 8},
+		{Title: "Min", Width: 8},
+		{Title: "Max", Width: 8},
 	}
 
 	rows := []table.Row{}

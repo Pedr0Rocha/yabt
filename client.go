@@ -17,7 +17,7 @@ var client = http.Client{
 
 var startTime time.Time
 
-var requestInterval = 500 * time.Millisecond
+var requestInterval = 1 * time.Second
 
 func run(ctx context.Context, responsesCh chan Response) {
 	startTime = time.Now()

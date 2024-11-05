@@ -22,7 +22,7 @@ $ ./yabt -url=http://localhost:8080
 
 ## Demo
 
-It starts with `Request Interval: 500ms` by default. You can change it by pressing up/down. The server in the demo
+It starts with `Request Interval: 1s` by default. You can change it by pressing up/down. The server in the demo
 returns random http statuses back and sleeps for 0~10ms.
 
 https://github.com/Pedr0Rocha/yabt/assets/7094503/262af3b0-3253-4bb2-a0bc-74fdc3f3246e
